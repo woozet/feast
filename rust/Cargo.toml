@@ -28,3 +28,6 @@ arrow = { version = "57", features = ["ipc"] }
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[dev-dependencies]
+tokio-stream = "0.1"

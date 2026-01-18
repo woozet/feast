@@ -52,6 +52,12 @@ cd feast/rust
 FEAST_REDIS_TESTS=1 FEAST_REDIS_ADDR=localhost:6379 cargo test
 ```
 
+Optional transformation service integration test:
+```bash
+cd feast/rust
+FEAST_TRANSFORM_TESTS=1 cargo test --test odfv_transformation_integration
+```
+
 ## How to run (HTTP)
 ```bash
 cd feast/rust

@@ -713,6 +713,7 @@ dependencies = [
  "sha2",
  "shellexpand",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-build",
  "tracing",
