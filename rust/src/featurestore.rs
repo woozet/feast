@@ -101,7 +101,24 @@ impl FeatureStore {
             onlineserving::get_feature_views_to_use_by_feature_refs(&feature_refs, &feature_views)?
         };
 
-        let entities = self.list_entities()?;
+        let mut entities = self.list_entities()?;
+        let entityless_case = requested_feature_views.iter().any(|view_and_refs| {
+            view_and_refs
+                .view
+                .entity_names
+                .iter()
+                .any(|name| name == model::DUMMY_ENTITY_NAME)
+        });
+        if entityless_case
+            && !entities
+                .iter()
+                .any(|entity| entity.name == model::DUMMY_ENTITY_NAME)
+        {
+            entities.push(model::Entity {
+                name: model::DUMMY_ENTITY_NAME.to_string(),
+                join_key: model::DUMMY_ENTITY_ID.to_string(),
+            });
+        }
         let (entity_name_to_join_key_map, expected_join_keys_set) =
             onlineserving::get_entity_maps(&requested_feature_views, &entities)?;
 
@@ -111,6 +128,16 @@ impl FeatureStore {
             &mut request_data,
             &expected_join_keys_set,
         )?;
+
+        if entityless_case {
+            let dummy_value = types::Value {
+                val: Some(types::value::Val::StringVal(model::DUMMY_ENTITY_VAL.to_string())),
+            };
+            join_key_to_entity_values.insert(
+                model::DUMMY_ENTITY_ID.to_string(),
+                vec![dummy_value; num_rows],
+            );
+        }
 
         let grouped_refs = onlineserving::group_feature_refs(
             &requested_feature_views,

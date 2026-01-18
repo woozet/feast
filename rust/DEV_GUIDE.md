@@ -14,7 +14,7 @@ This file captures the current Rust feature server work so it can be resumed qui
 - Model mapping: `Entity`, `FeatureView`, `FeatureService`, projections in `feast/rust/src/model.rs`.
 - Online serving logic: grouping, join key validation, TTL check, feature vector assembly in `feast/rust/src/onlineserving.rs`.
 - Redis online read: HMGET with Go-compatible keys and field hashing in `feast/rust/src/onlinestore.rs`.
-- HTTP/gRPC servers: `feast/rust/src/server.rs`.
+- HTTP/gRPC servers: `feast/rust/src/server/http.rs`, `feast/rust/src/server/grpc.rs`.
 - Entry point: `feast/rust/src/main.rs`.
 
 ## Known gaps / TODO
@@ -96,6 +96,7 @@ git push -u fork feat/rust-feature-server
 ## Files to know
 - `feast/rust/src/onlineserving.rs` (core request pipeline)
 - `feast/rust/src/onlinestore.rs` (Redis keying + HMGET)
-- `feast/rust/src/server.rs` (HTTP + gRPC endpoints)
+- `feast/rust/src/server/http.rs` (HTTP endpoint)
+- `feast/rust/src/server/grpc.rs` (gRPC endpoint)
+- `feast/rust/src/encoding.rs` (JSON/proto conversions)
 - `feast/rust/src/featurestore.rs` (orchestration)
-
