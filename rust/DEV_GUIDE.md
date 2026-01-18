@@ -18,7 +18,7 @@ This file captures the current Rust feature server work so it can be resumed qui
 - Entry point: `feast/rust/src/main.rs`.
 
 ## Known gaps / TODO
-- OnDemand Feature Views (ODFV) and transformation service are not implemented.
+- OnDemand Feature Views (ODFV) and transformation service are implemented but untested.
 - Feature logging (feature service logging_config) is not implemented.
 - HTTP response format uses direct proto Value -> JSON conversion; Go uses Arrow JSON marshalling.
 - Redis cluster behavior is untested (cluster feature enabled, no `ReadOnly` tuning yet).
@@ -27,7 +27,7 @@ This file captures the current Rust feature server work so it can be resumed qui
 
 ## Next steps (recommended order)
 1) Add entity-less handling (dummy entity injection) to `FeatureStore::get_online_features`.
-2) Add OnDemand Feature View support via transformation service (GrpcTransformationService equivalent).
+2) Add tests for OnDemand Feature View + transformation service integration.
 3) Align HTTP JSON response format with Go (Arrow-like JSON) if strict parity is required.
 4) Add integration tests (Redis + registry fixture) and a sample feature repo.
 5) Add feature logging support when feature service has logging_config.

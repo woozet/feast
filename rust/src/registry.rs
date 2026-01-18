@@ -98,6 +98,15 @@ impl Registry {
             .collect())
     }
 
+    pub fn list_on_demand_feature_views(&mut self) -> Result<Vec<model::OnDemandFeatureView>> {
+        let registry = self.get_registry_proto()?;
+        Ok(registry
+            .on_demand_feature_views
+            .iter()
+            .map(model::OnDemandFeatureView::from_proto)
+            .collect())
+    }
+
     pub fn get_feature_service(&mut self, name: &str) -> Result<model::FeatureService> {
         let registry = self.get_registry_proto()?;
         registry

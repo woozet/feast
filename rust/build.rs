@@ -4,6 +4,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let proto_root = "../protos";
     let files = [
         "../protos/feast/serving/ServingService.proto",
+        "../protos/feast/serving/TransformationService.proto",
         "../protos/feast/types/Value.proto",
         "../protos/feast/types/EntityKey.proto",
         "../protos/feast/core/Registry.proto",

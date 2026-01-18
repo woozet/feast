@@ -53,51 +53,120 @@ fn add_string_if_not_contains(mut values: Vec<String>, element: &str) -> Vec<Str
 pub fn get_feature_views_to_use_by_service(
     feature_service: &model::FeatureService,
     feature_views: &HashMap<String, model::FeatureView>,
-) -> Result<Vec<FeatureViewAndRefs>> {
+) -> Result<(Vec<FeatureViewAndRefs>, Vec<model::OnDemandFeatureView>)> {
+    get_feature_views_to_use_by_service_with_odfv(feature_service, feature_views, &HashMap::new())
+}
+
+pub fn get_feature_views_to_use_by_service_with_odfv(
+    feature_service: &model::FeatureService,
+    feature_views: &HashMap<String, model::FeatureView>,
+    on_demand_feature_views: &HashMap<String, model::OnDemandFeatureView>,
+) -> Result<(Vec<FeatureViewAndRefs>, Vec<model::OnDemandFeatureView>)> {
     let mut view_name_to_view = HashMap::new();
+    let mut odfvs_to_use = Vec::new();
 
     for projection in &feature_service.projections {
         let feature_view_name = projection.name.clone();
-        let fv = feature_views
-            .get(&feature_view_name)
-            .with_context(|| format!("feature view {feature_view_name} not found"))?;
-        let base = fv.base.with_projection(projection.clone())?;
-        let projected_view = fv.new_from_base(base);
-        let key = projection.name_to_use().to_string();
-        let entry = view_name_to_view.entry(key).or_insert_with(|| FeatureViewAndRefs {
-            view: projected_view.clone(),
-            feature_refs: Vec::new(),
-        });
+        if let Some(fv) = feature_views.get(&feature_view_name) {
+            let base = fv.base.with_projection(projection.clone())?;
+            let projected_view = fv.new_from_base(base);
+            let key = projection.name_to_use().to_string();
+            let entry = view_name_to_view.entry(key).or_insert_with(|| FeatureViewAndRefs {
+                view: projected_view.clone(),
+                feature_refs: Vec::new(),
+            });
 
-        for feature in &projection.features {
-            entry.feature_refs = add_string_if_not_contains(entry.feature_refs.clone(), &feature.name);
+            for feature in &projection.features {
+                entry.feature_refs =
+                    add_string_if_not_contains(entry.feature_refs.clone(), &feature.name);
+            }
+        } else if let Some(odfv) = on_demand_feature_views.get(&feature_view_name) {
+            let projected_odfv = odfv.new_with_projection(projection.clone())?;
+            extract_odfv_dependencies(&projected_odfv, feature_views, &mut view_name_to_view)?;
+            odfvs_to_use.push(projected_odfv);
+        } else {
+            anyhow::bail!("feature view {feature_view_name} not found");
         }
     }
 
-    Ok(view_name_to_view.into_values().collect())
+    Ok((view_name_to_view.into_values().collect(), odfvs_to_use))
 }
 
 pub fn get_feature_views_to_use_by_feature_refs(
     features: &[String],
     feature_views: &HashMap<String, model::FeatureView>,
-) -> Result<Vec<FeatureViewAndRefs>> {
+) -> Result<(Vec<FeatureViewAndRefs>, Vec<model::OnDemandFeatureView>)> {
+    get_feature_views_to_use_by_feature_refs_with_odfv(features, feature_views, &HashMap::new())
+}
+
+pub fn get_feature_views_to_use_by_feature_refs_with_odfv(
+    features: &[String],
+    feature_views: &HashMap<String, model::FeatureView>,
+    on_demand_feature_views: &HashMap<String, model::OnDemandFeatureView>,
+) -> Result<(Vec<FeatureViewAndRefs>, Vec<model::OnDemandFeatureView>)> {
     let mut view_name_to_view = HashMap::new();
+    let mut odfv_to_features: HashMap<String, Vec<String>> = HashMap::new();
 
     for feature_ref in features {
         let (feature_view_name, feature_name) = parse_feature_reference(feature_ref)?;
-        let fv = feature_views
-            .get(&feature_view_name)
-            .with_context(|| format!("feature view {feature_view_name} not found"))?;
-        let entry = view_name_to_view
-            .entry(fv.base.name.clone())
-            .or_insert_with(|| FeatureViewAndRefs {
-                view: fv.clone(),
-                feature_refs: Vec::new(),
-            });
-        entry.feature_refs = add_string_if_not_contains(entry.feature_refs.clone(), &feature_name);
+        if let Some(fv) = feature_views.get(&feature_view_name) {
+            let entry = view_name_to_view
+                .entry(fv.base.name.clone())
+                .or_insert_with(|| FeatureViewAndRefs {
+                    view: fv.clone(),
+                    feature_refs: Vec::new(),
+                });
+            entry.feature_refs =
+                add_string_if_not_contains(entry.feature_refs.clone(), &feature_name);
+        } else if on_demand_feature_views.contains_key(&feature_view_name) {
+            odfv_to_features
+                .entry(feature_view_name.clone())
+                .or_default()
+                .push(feature_name);
+        } else {
+            anyhow::bail!("feature view {feature_view_name} not found");
+        }
     }
 
-    Ok(view_name_to_view.into_values().collect())
+    let mut odfvs_to_use = Vec::new();
+    for (odfv_name, feature_names) in odfv_to_features {
+        let odfv = on_demand_feature_views
+            .get(&odfv_name)
+            .with_context(|| format!("feature view {odfv_name} not found"))?;
+        let projected = odfv.project_with_features(&feature_names)?;
+        extract_odfv_dependencies(&projected, feature_views, &mut view_name_to_view)?;
+        odfvs_to_use.push(projected);
+    }
+
+    Ok((view_name_to_view.into_values().collect(), odfvs_to_use))
+}
+
+fn extract_odfv_dependencies(
+    odfv: &model::OnDemandFeatureView,
+    source_fvs: &HashMap<String, model::FeatureView>,
+    requested_features: &mut HashMap<String, FeatureViewAndRefs>,
+) -> Result<()> {
+    for projection in odfv.source_feature_view_projections.values() {
+        let fv = source_fvs
+            .get(&projection.name)
+            .with_context(|| format!("feature view {} not found", projection.name))?;
+        let base = fv.base.with_projection(projection.clone())?;
+        let new_fv = fv.new_from_base(base);
+
+        let entry = requested_features
+            .entry(projection.name_to_use().to_string())
+            .or_insert_with(|| FeatureViewAndRefs {
+                view: new_fv.clone(),
+                feature_refs: Vec::new(),
+            });
+
+        for feature in &projection.features {
+            entry.feature_refs =
+                add_string_if_not_contains(entry.feature_refs.clone(), &feature.name);
+        }
+    }
+
+    Ok(())
 }
 
 pub fn get_entity_maps(
