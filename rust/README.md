@@ -63,6 +63,6 @@ FEAST_TRANSFORM_TESTS=1 cargo test --test odfv_transformation_integration
 ```
 
 ## Notes
-- JSON output uses direct proto `Value` conversion (not Arrow JSON).
+- HTTP JSON output matches Go Arrow JSON for supported Feast value types.
 - Transformation service and Redis cluster behavior are supported but lightly tested.
 - See `feast/rust/DEV_GUIDE.md` for current status and planned work.

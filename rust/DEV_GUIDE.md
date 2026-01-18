@@ -23,7 +23,7 @@ This file captures the current Rust feature server work so it can be resumed qui
 ## Known gaps / TODO
 - OnDemand Feature Views (ODFV) and transformation service are implemented but lack integration tests.
 - Feature logging (feature service logging_config) is not implemented.
-- HTTP response format uses direct proto Value -> JSON conversion; Go uses Arrow JSON marshalling.
+- HTTP response format matches Go Arrow JSON for supported Feast value types.
 - Redis cluster behavior is untested (cluster feature enabled, no `ReadOnly` tuning yet).
 - Redis integration test requires `FEAST_REDIS_TESTS=1` and a local Redis instance.
 

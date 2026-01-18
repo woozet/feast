@@ -40,8 +40,15 @@ pub fn value_to_json(value: &types::Value) -> JsonValue {
         Some(types::value::Val::DoubleListVal(list)) => json!(list.val),
         Some(types::value::Val::FloatListVal(list)) => json!(list.val),
         Some(types::value::Val::BoolListVal(list)) => json!(list.val),
-        Some(types::value::Val::UnixTimestampVal(value)) => json!(*value),
-        Some(types::value::Val::UnixTimestampListVal(list)) => json!(list.val),
+        Some(types::value::Val::UnixTimestampVal(value)) => {
+            JsonValue::String(unix_timestamp_to_arrow_json(*value))
+        }
+        Some(types::value::Val::UnixTimestampListVal(list)) => JsonValue::Array(
+            list.val
+                .iter()
+                .map(|value| JsonValue::String(unix_timestamp_to_arrow_json(*value)))
+                .collect(),
+        ),
         Some(types::value::Val::NullVal(_)) => JsonValue::Null,
         Some(types::value::Val::MapVal(map)) => map_to_json(map),
         Some(types::value::Val::MapListVal(list)) => {
@@ -58,6 +65,12 @@ pub fn field_status_to_string(status: serving::FieldStatus) -> String {
 pub fn timestamp_to_rfc3339(timestamp: &prost_types::Timestamp) -> String {
     DateTime::<Utc>::from_timestamp(timestamp.seconds, timestamp.nanos.max(0) as u32)
         .map(|dt| dt.to_rfc3339())
+        .unwrap_or_default()
+}
+
+fn unix_timestamp_to_arrow_json(seconds: i64) -> String {
+    DateTime::<Utc>::from_timestamp(seconds, 0)
+        .map(|dt| format!("{}Z", dt.format("%Y-%m-%d %H:%M:%S%.9f")))
         .unwrap_or_default()
 }
 
@@ -186,4 +199,20 @@ fn map_to_json(map: &types::Map) -> JsonValue {
         obj.insert(key.clone(), value_to_json(value));
     }
     JsonValue::Object(obj)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unix_timestamp_formats_like_arrow_json() {
+        let value = types::Value {
+            val: Some(types::value::Val::UnixTimestampVal(0)),
+        };
+        assert_eq!(
+            value_to_json(&value),
+            JsonValue::String("1970-01-01 00:00:00.000000000Z".to_string())
+        );
+    }
 }
