@@ -6,7 +6,9 @@ This file captures the current Rust feature server work so it can be resumed qui
 - Rust crate lives under `feast/rust`.
 - Feature store config loading, registry file loading, Redis online store keying, and HTTP/gRPC serving are implemented.
 - HTTP endpoint `/get-online-features` and gRPC `GetOnlineFeatures` are wired to the Rust pipeline.
-- Tests: `cargo test` passes (requires network access the first time to fetch crates).
+- OnDemand Feature Views are supported via the transformation service (Arrow IPC).
+- Entity-less (dummy entity) handling is supported in `FeatureStore`.
+- Tests: `cargo test` passes (requires network access the first time to fetch crates). Integration tests include a registry fixture and an optional Redis roundtrip.
 
 ## Implemented pieces
 - Config parsing: `feature_store.yaml` with env expansion in `feast/rust/src/config.rs`.
@@ -14,23 +16,22 @@ This file captures the current Rust feature server work so it can be resumed qui
 - Model mapping: `Entity`, `FeatureView`, `FeatureService`, projections in `feast/rust/src/model.rs`.
 - Online serving logic: grouping, join key validation, TTL check, feature vector assembly in `feast/rust/src/onlineserving.rs`.
 - Redis online read: HMGET with Go-compatible keys and field hashing in `feast/rust/src/onlinestore.rs`.
+- Transformation service: gRPC client + Arrow IPC request/response handling in `feast/rust/src/transformation.rs`.
 - HTTP/gRPC servers: `feast/rust/src/server/http.rs`, `feast/rust/src/server/grpc.rs`.
 - Entry point: `feast/rust/src/main.rs`.
 
 ## Known gaps / TODO
-- OnDemand Feature Views (ODFV) and transformation service are implemented but untested.
+- OnDemand Feature Views (ODFV) and transformation service are implemented but lack integration tests.
 - Feature logging (feature service logging_config) is not implemented.
 - HTTP response format uses direct proto Value -> JSON conversion; Go uses Arrow JSON marshalling.
 - Redis cluster behavior is untested (cluster feature enabled, no `ReadOnly` tuning yet).
-- No integration tests yet (only unit tests for keying logic).
-- Entity-less (dummy entity) handling is not implemented in Rust `FeatureStore`.
+- Redis integration test requires `FEAST_REDIS_TESTS=1` and a local Redis instance.
 
 ## Next steps (recommended order)
-1) Add entity-less handling (dummy entity injection) to `FeatureStore::get_online_features`.
-2) Add tests for OnDemand Feature View + transformation service integration.
-3) Align HTTP JSON response format with Go (Arrow-like JSON) if strict parity is required.
-4) Add integration tests (Redis + registry fixture) and a sample feature repo.
-5) Add feature logging support when feature service has logging_config.
+1) Add tests for OnDemand Feature View + transformation service integration.
+2) Align HTTP JSON response format with Go (Arrow-like JSON) if strict parity is required.
+3) Add feature logging support when feature service has logging_config.
+4) Add Redis cluster integration tests and tuning as needed.
 
 ## How to build
 ```bash
@@ -44,6 +45,12 @@ cd feast/rust
 cargo test
 ```
 Note: first run may need network to download crates.
+
+Optional Redis integration test:
+```bash
+cd feast/rust
+FEAST_REDIS_TESTS=1 FEAST_REDIS_ADDR=localhost:6379 cargo test
+```
 
 ## How to run (HTTP)
 ```bash
