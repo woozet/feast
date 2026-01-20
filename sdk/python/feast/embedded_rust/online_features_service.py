@@ -31,19 +31,23 @@ class EmbeddedRustOnlineFeatureServer:
         self._service = service
 
     def __del__(self):
-        service = getattr(self, "_service", None)
-        ffi_handle = globals().get("ffi")
-        lib_handle = globals().get("lib")
-        if (
-            service is None
-            or ffi_handle is None
-            or lib_handle is None
-            or getattr(ffi_handle, "NULL", None) is None
-        ):
+        try:
+            service = getattr(self, "_service", None)
+            ffi_handle = globals().get("ffi")
+            lib_handle = globals().get("lib")
+            if (
+                service is None
+                or ffi_handle is None
+                or lib_handle is None
+                or getattr(ffi_handle, "NULL", None) is None
+            ):
+                return
+            if service != ffi_handle.NULL:
+                lib_handle.feast_rust_free_service(service)
+                self._service = ffi_handle.NULL
+        except Exception:
+            # Avoid interpreter-shutdown errors from cffi internals.
             return
-        if service != ffi_handle.NULL:
-            lib_handle.feast_rust_free_service(service)
-            self._service = ffi_handle.NULL
 
     def get_online_features(
         self,
