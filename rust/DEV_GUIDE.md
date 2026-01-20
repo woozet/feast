@@ -19,9 +19,10 @@ This file captures the current Rust feature server work so it can be resumed qui
 - Transformation service: gRPC client + Arrow IPC request/response handling in `feast/rust/src/transformation.rs`.
 - HTTP/gRPC servers: `feast/rust/src/server/http.rs`, `feast/rust/src/server/grpc.rs`.
 - Entry point: `feast/rust/src/main.rs`.
+- Tests: `feast/rust/tests/odfv_selection.rs` covers ODFV selection logic for feature services and feature refs.
 
 ## Known gaps / TODO
-- OnDemand Feature Views (ODFV) and transformation service are implemented but lack integration tests.
+- OnDemand Feature Views (ODFV) selection has unit tests, but end-to-end integration coverage with transformation service is still limited.
 - Feature logging (feature service logging_config) is not implemented.
 - HTTP response format matches Go Arrow JSON for supported Feast value types.
 - Redis cluster behavior is untested (cluster feature enabled, no `ReadOnly` tuning yet).
