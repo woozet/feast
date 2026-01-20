@@ -7,4 +7,5 @@ prune examples
 
 graft sdk/python/feast/ui/build
 graft sdk/python/feast/embedded_go/lib
+graft sdk/python/feast/embedded_rust/lib
 recursive-include sdk/python/feast/static *

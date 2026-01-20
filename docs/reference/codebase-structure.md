@@ -31,6 +31,7 @@ There are also several important submodules:
 * `dqm/` covers data quality monitoring, such as the dataset profiler.
 * `diff/` covers the logic for determining how to apply infrastructure changes upon feature repo changes (e.g. the output of `feast plan` and `feast apply`).
 * `embedded_go/` covers the Go feature server.
+* `embedded_rust/` covers optional Rust embedding for Python (CFFI).
 * `ui/` contains the embedded Web UI, to be launched on the `feast ui` command.
 
 Of these submodules, `infra/` is the most important.

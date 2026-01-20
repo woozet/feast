@@ -249,23 +249,25 @@ include = ["*.py", "*.pyi"]
 
 [tool.ruff.format]
 # exclude a few common directories in the root of the project
-exclude = [ 
-  ".eggs", 
-  ".git", 
-  ".hg", 
+exclude = [
+  ".eggs",
+  ".git",
+  ".hg",
   ".mypy_cache",
-  ".tox", 
-  ".venv", 
-  "_build", 
+  ".tox",
+  ".venv",
+  "_build",
   "buck-out",
   "build",
   "dist",
   "pb2.py",
   ".pyi",
   "protos",
-  "sdk/python/feast/embedded_go/lib"]
+  "sdk/python/feast/embedded_go/lib",
+  "sdk/python/feast/embedded_rust/lib",
+]
 
 [dependency-groups]
 dev = [
-    "pytest-xdist>=3.8.0",
+  "pytest-xdist>=3.8.0",
 ]

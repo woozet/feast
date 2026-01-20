@@ -20,6 +20,10 @@ cargo build --release
 
 The server reads `feature_store.yaml` from the repository path (`--chdir`, default `.`).
 
+## Embedded Rust (cffi)
+There is a CFFI-based wrapper under `sdk/python/feast/embedded_rust/` that can
+load the Rust shared library for embedded online serving experiments.
+
 ## Configuration
 Minimal `feature_store.yaml`:
 ```yaml
