@@ -83,6 +83,15 @@ FEAST_PY_ODFV_NAME=transformed_conv_rate \
 cargo test --test odfv_e2e
 ```
 
+Optional CFFI smoke test:
+```bash
+cd feast/rust
+FEAST_CFFI_TESTS=1 \
+FEAST_CFFI_REPO=../../feast-compat-sample/feature_repo \
+FEAST_RUST_LIB_PATH=../sdk/python/feast/embedded_rust/lib/libfeast_rust.dylib \
+cargo test --test cffi_e2e
+```
+
 ## How to run (HTTP)
 ```bash
 cd feast/rust
