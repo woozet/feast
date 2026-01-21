@@ -24,6 +24,24 @@ The server reads `feature_store.yaml` from the repository path (`--chdir`, defau
 There is a CFFI-based wrapper under `sdk/python/feast/embedded_rust/` that can
 load the Rust shared library for embedded online serving experiments.
 
+Build the shared library and point Python at it:
+```bash
+cd feast/rust
+cargo build --release
+# macOS
+cp target/release/libfeast_rust.dylib ../sdk/python/feast/embedded_rust/lib/
+# Linux: libfeast_rust.so, Windows: feast_rust.dll
+```
+
+Smoke test (requires Python deps + registry data):
+```bash
+cd feast/rust
+FEAST_CFFI_TESTS=1 \
+FEAST_CFFI_REPO=../../feast-compat-sample/feature_repo \
+FEAST_RUST_LIB_PATH=../sdk/python/feast/embedded_rust/lib/libfeast_rust.dylib \
+cargo test --test cffi_e2e
+```
+
 ## Configuration
 Minimal `feature_store.yaml`:
 ```yaml
@@ -64,6 +82,14 @@ Optional integration tests:
 ```bash
 FEAST_REDIS_TESTS=1 FEAST_REDIS_ADDR=localhost:6379 cargo test
 FEAST_TRANSFORM_TESTS=1 cargo test --test odfv_transformation_integration
+```
+
+Optional Python transformation server E2E test:
+```bash
+FEAST_PY_TRANSFORM_TESTS=1 \
+FEAST_PY_TRANSFORM_REPO=../../feast-compat-sample/feature_repo \
+FEAST_PY_ODFV_NAME=transformed_conv_rate \
+cargo test --test odfv_e2e
 ```
 
 ## Notes
