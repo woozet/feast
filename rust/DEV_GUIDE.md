@@ -34,6 +34,21 @@ This file captures the current Rust feature server work so it can be resumed qui
 3) Add feature logging support when feature service has logging_config.
 4) Add Redis cluster integration tests and tuning as needed.
 
+## PR readiness checklist (suggested)
+- `cargo test` passes.
+- Redis integration tests pass (`FEAST_REDIS_TESTS=1` with local Redis).
+- ODFV transformation integration test passes (`FEAST_TRANSFORM_TESTS=1`).
+- Python CFFI smoke test validates `EmbeddedRustOnlineFeatureServer`.
+- Docs mention any known gaps (feature logging, type limits, cluster support).
+
+## ODFV end-to-end test placement
+- Put E2E ODFV tests under `feast/rust/tests/`, e.g. `odfv_e2e.rs`.
+- Keep them behind an opt-in env var (`FEAST_PY_TRANSFORM_TESTS=1`) because they require Python + Feast deps.
+- Run the Python transformation server in a subprocess using the Feast Python API:
+  - `FeatureStore(...).serve_transformations(port)` (see `feast/sdk/python/feast/transformation_server.py`).
+  - The Rust test points `transformation_service_endpoint` at `http://127.0.0.1:<port>`.
+- Recommended repo: `feast-compat-sample/feature_repo` (run `feast apply` to generate `data/registry.db`).
+
 ## How to build
 ```bash
 cd feast/rust
@@ -57,6 +72,15 @@ Optional transformation service integration test:
 ```bash
 cd feast/rust
 FEAST_TRANSFORM_TESTS=1 cargo test --test odfv_transformation_integration
+```
+
+Optional Python transformation server E2E test (proposed):
+```bash
+cd feast/rust
+FEAST_PY_TRANSFORM_TESTS=1 \
+FEAST_PY_TRANSFORM_REPO=../../feast-compat-sample/feature_repo \
+FEAST_PY_ODFV_NAME=transformed_conv_rate \
+cargo test --test odfv_e2e
 ```
 
 ## How to run (HTTP)
