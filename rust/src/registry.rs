@@ -1,125 +1,29 @@
+mod snapshot;
+mod store;
+
 use crate::config::RegistryConfig;
 use crate::model;
-use crate::proto::feast::core;
 use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
-use prost::Message;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug)]
-pub struct RegistrySnapshot {
-    pub(crate) entities: Vec<model::Entity>,
-    pub(crate) feature_views: Vec<model::FeatureView>,
-    pub(crate) stream_feature_views: Vec<model::FeatureView>,
-    pub(crate) feature_services: Vec<model::FeatureService>,
-    pub(crate) on_demand_feature_views: Vec<model::OnDemandFeatureView>,
-    pub(crate) feature_views_by_name: HashMap<String, model::FeatureView>,
-    pub(crate) stream_feature_views_by_name: HashMap<String, model::FeatureView>,
-    pub(crate) feature_services_by_name: HashMap<String, model::FeatureService>,
-    pub(crate) on_demand_feature_views_by_name: HashMap<String, model::OnDemandFeatureView>,
-    pub(crate) all_feature_views_by_name: HashMap<String, model::FeatureView>,
-}
-
-impl RegistrySnapshot {
-    fn empty() -> Self {
-        Self {
-            entities: Vec::new(),
-            feature_views: Vec::new(),
-            stream_feature_views: Vec::new(),
-            feature_services: Vec::new(),
-            on_demand_feature_views: Vec::new(),
-            feature_views_by_name: HashMap::new(),
-            stream_feature_views_by_name: HashMap::new(),
-            feature_services_by_name: HashMap::new(),
-            on_demand_feature_views_by_name: HashMap::new(),
-            all_feature_views_by_name: HashMap::new(),
-        }
-    }
-
-    fn from_proto(registry: core::Registry) -> Self {
-        let entities = registry
-            .entities
-            .iter()
-            .map(model::Entity::from_proto)
-            .collect::<Vec<_>>();
-        let feature_views = registry
-            .feature_views
-            .iter()
-            .map(model::FeatureView::from_proto)
-            .collect::<Vec<_>>();
-        let stream_feature_views = registry
-            .stream_feature_views
-            .iter()
-            .map(model::FeatureView::from_stream_proto)
-            .collect::<Vec<_>>();
-        let feature_services = registry
-            .feature_services
-            .iter()
-            .map(model::FeatureService::from_proto)
-            .collect::<Vec<_>>();
-        let on_demand_feature_views = registry
-            .on_demand_feature_views
-            .iter()
-            .map(model::OnDemandFeatureView::from_proto)
-            .collect::<Vec<_>>();
-
-        let mut feature_views_by_name = HashMap::new();
-        for view in &feature_views {
-            feature_views_by_name.insert(view.base.name.clone(), view.clone());
-        }
-
-        let mut stream_feature_views_by_name = HashMap::new();
-        for view in &stream_feature_views {
-            stream_feature_views_by_name.insert(view.base.name.clone(), view.clone());
-        }
-
-        let mut feature_services_by_name = HashMap::new();
-        for service in &feature_services {
-            feature_services_by_name.insert(service.name.clone(), service.clone());
-        }
-
-        let mut on_demand_feature_views_by_name = HashMap::new();
-        for view in &on_demand_feature_views {
-            on_demand_feature_views_by_name.insert(view.base.name.clone(), view.clone());
-        }
-
-        let mut all_feature_views_by_name = feature_views_by_name.clone();
-        for (name, view) in &stream_feature_views_by_name {
-            all_feature_views_by_name.insert(name.clone(), view.clone());
-        }
-
-        Self {
-            entities,
-            feature_views,
-            stream_feature_views,
-            feature_services,
-            on_demand_feature_views,
-            feature_views_by_name,
-            stream_feature_views_by_name,
-            feature_services_by_name,
-            on_demand_feature_views_by_name,
-            all_feature_views_by_name,
-        }
-    }
-}
+pub use snapshot::RegistrySnapshot;
+use store::RegistryStore;
 
 pub struct Registry {
     project: String,
-    store: FileRegistryStore,
+    store: RegistryStore,
     snapshot: ArcSwap<RegistrySnapshot>,
     last_refresh_epoch_secs: AtomicU64,
 }
 
 impl Registry {
     pub fn new(config: &RegistryConfig, repo_path: &Path, project: String) -> Result<Self> {
-        let store = match config.registry_store_type.as_deref() {
-            None | Some("") | Some("file") => FileRegistryStore::new(config, repo_path),
-            Some(other) => anyhow::bail!("registry_store_type {other} is not supported"),
-        };
+        let store = RegistryStore::new(config, repo_path)?;
 
         Ok(Self {
             project,
@@ -213,29 +117,5 @@ impl Registry {
             .get(name)
             .cloned()
             .with_context(|| format!("feature view not found: {name}"))
-    }
-}
-
-struct FileRegistryStore {
-    file_path: PathBuf,
-}
-
-impl FileRegistryStore {
-    fn new(config: &RegistryConfig, repo_path: &Path) -> Self {
-        let registry_path = Path::new(&config.path);
-        let file_path = if registry_path.is_absolute() {
-            registry_path.to_path_buf()
-        } else {
-            repo_path.join(registry_path)
-        };
-
-        Self { file_path }
-    }
-
-    fn get_registry_proto(&self) -> Result<core::Registry> {
-        let data = std::fs::read(&self.file_path)
-            .with_context(|| format!("failed to read registry at {}", self.file_path.display()))?;
-        let registry = core::Registry::decode(data.as_slice())?;
-        Ok(registry)
     }
 }

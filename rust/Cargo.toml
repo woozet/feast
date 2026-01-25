@@ -29,6 +29,8 @@ chrono = { version = "0.4", features = ["std", "clock"] }
 base64 = "0.22"
 arrow = { version = "57", features = ["ffi", "ipc"] }
 arc-swap = "1.7"
+aws-config = "0.2"
+aws-sdk-s3 = "0.2"
 
 [build-dependencies]
 tonic-build = "0.12"
