@@ -36,6 +36,10 @@ impl FeatureStore {
         })
     }
 
+    pub fn refresh_registry(&mut self) -> Result<()> {
+        self.registry.refresh()
+    }
+
     pub fn parse_features(
         &mut self,
         kind: &serving::get_online_features_request::Kind,

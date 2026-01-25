@@ -9,11 +9,20 @@ use crate::proto::feast::serving::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::time::Duration;
 use tonic::{Request, Response, Status};
+use tracing::warn;
 
-pub async fn start_grpc(store: FeatureStore, host: &str, port: u16) -> anyhow::Result<()> {
+pub async fn start_grpc(
+    store: FeatureStore,
+    host: &str,
+    port: u16,
+    registry_ttl_sec: u64,
+) -> anyhow::Result<()> {
     let addr = super::bind_addr(host, port)?;
-    let service = GrpcServingService::new(Arc::new(Mutex::new(store)));
+    let store = Arc::new(Mutex::new(store));
+    spawn_registry_refresher(store.clone(), registry_ttl_sec);
+    let service = GrpcServingService::new(store);
 
     tonic::transport::Server::builder()
         .add_service(ServingServiceServer::new(service))
@@ -21,6 +30,23 @@ pub async fn start_grpc(store: FeatureStore, host: &str, port: u16) -> anyhow::R
         .await?;
 
     Ok(())
+}
+
+fn spawn_registry_refresher(store: Arc<Mutex<FeatureStore>>, registry_ttl_sec: u64) {
+    if registry_ttl_sec == 0 {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(registry_ttl_sec));
+        loop {
+            ticker.tick().await;
+            let mut store = store.lock().await;
+            if let Err(err) = store.refresh_registry() {
+                warn!(error = %err, "registry refresh failed");
+            }
+        }
+    });
 }
 
 struct GrpcServingService {

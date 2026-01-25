@@ -34,6 +34,17 @@ impl Registry {
         self.get_registry_proto().map(|_| ())
     }
 
+    /// Force a reload of the registry from the underlying store, ignoring cache TTL.
+    ///
+    /// This mirrors the Python feature server behavior which refreshes registry out-of-band
+    /// to avoid synchronous downloads/reads in the request path.
+    pub fn refresh(&mut self) -> Result<()> {
+        let registry = self.store.get_registry_proto()?;
+        self.cached = Some(registry);
+        self.cached_at = Some(Instant::now());
+        Ok(())
+    }
+
     pub fn project(&self) -> &str {
         &self.project
     }

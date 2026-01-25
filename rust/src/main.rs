@@ -15,6 +15,9 @@ struct Args {
     host: String,
     #[arg(long, default_value_t = 8080)]
     port: u16,
+    /// How often to refresh the registry out-of-band (seconds). Set to 0 to disable.
+    #[arg(long = "registry-ttl-sec", default_value_t = 5)]
+    registry_ttl_sec: u64,
     #[arg(long = "chdir", default_value = ".")]
     repo_path: PathBuf,
 }
@@ -35,8 +38,8 @@ async fn main() -> anyhow::Result<()> {
     let store = FeatureStore::new(config)?;
 
     match args.server_type.to_lowercase().as_str() {
-        "http" => server::start_http(store, &args.host, args.port).await?,
-        "grpc" => server::start_grpc(store, &args.host, args.port).await?,
+        "http" => server::start_http(store, &args.host, args.port, args.registry_ttl_sec).await?,
+        "grpc" => server::start_grpc(store, &args.host, args.port, args.registry_ttl_sec).await?,
         other => anyhow::bail!("unknown server type: {other}"),
     }
 
