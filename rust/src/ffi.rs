@@ -13,6 +13,7 @@ use arrow::ffi::{from_ffi, to_ffi, FFI_ArrowArray, FFI_ArrowSchema};
 use arrow::record_batch::RecordBatch;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::panic::AssertUnwindSafe;
 use std::path::Path;
 
 pub struct ServiceHandle {
@@ -32,7 +33,7 @@ pub extern "C" fn feast_rust_new_service(
     repo_path: *const c_char,
     err_out: *mut *mut c_char,
 ) -> *mut ServiceHandle {
-    let result = std::panic::catch_unwind(|| -> Result<ServiceHandle> {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<ServiceHandle> {
         if repo_path.is_null() {
             anyhow::bail!("repo_path is null");
         }
@@ -44,11 +45,8 @@ pub extern "C" fn feast_rust_new_service(
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        Ok(ServiceHandle {
-            store,
-            runtime,
-        })
-    });
+        Ok(ServiceHandle { store, runtime })
+    }));
 
     match result {
         Ok(Ok(handle)) => Box::into_raw(Box::new(handle)),
@@ -85,7 +83,7 @@ pub extern "C" fn feast_rust_get_online_features(
     output: *mut DataTable,
     err_out: *mut *mut c_char,
 ) -> bool {
-    let result = std::panic::catch_unwind(|| -> Result<()> {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<()> {
         if service.is_null() {
             anyhow::bail!("service is null");
         }
@@ -125,7 +123,7 @@ pub extern "C" fn feast_rust_get_online_features(
         let batch = vectors_to_record_batch(&vectors)?;
         export_record_batch(output, batch)?;
         Ok(())
-    });
+    }));
 
     match result {
         Ok(Ok(_)) => true,

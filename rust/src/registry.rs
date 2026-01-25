@@ -2,7 +2,7 @@ use crate::config::RegistryConfig;
 use crate::model;
 use crate::proto::feast::core;
 use anyhow::{Context, Result};
-use arcswap::ArcSwap;
+use arc_swap::ArcSwap;
 use prost::Message;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
