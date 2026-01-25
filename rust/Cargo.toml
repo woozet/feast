@@ -28,6 +28,7 @@ sha2 = "0.10"
 chrono = { version = "0.4", features = ["std", "clock"] }
 base64 = "0.22"
 arrow = { version = "57", features = ["ffi", "ipc"] }
+arcswap = "1.7"
 
 [build-dependencies]
 tonic-build = "0.12"

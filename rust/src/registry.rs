@@ -2,16 +2,124 @@ use crate::config::RegistryConfig;
 use crate::model;
 use crate::proto::feast::core;
 use anyhow::{Context, Result};
+use arcswap::ArcSwap;
 use prost::Message;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug)]
+pub struct RegistrySnapshot {
+    pub(crate) entities: Vec<model::Entity>,
+    pub(crate) feature_views: Vec<model::FeatureView>,
+    pub(crate) stream_feature_views: Vec<model::FeatureView>,
+    pub(crate) feature_services: Vec<model::FeatureService>,
+    pub(crate) on_demand_feature_views: Vec<model::OnDemandFeatureView>,
+    pub(crate) entities_by_name: HashMap<String, model::Entity>,
+    pub(crate) feature_views_by_name: HashMap<String, model::FeatureView>,
+    pub(crate) stream_feature_views_by_name: HashMap<String, model::FeatureView>,
+    pub(crate) feature_services_by_name: HashMap<String, model::FeatureService>,
+    pub(crate) on_demand_feature_views_by_name: HashMap<String, model::OnDemandFeatureView>,
+    pub(crate) all_feature_views_by_name: HashMap<String, model::FeatureView>,
+}
+
+impl RegistrySnapshot {
+    fn empty() -> Self {
+        Self {
+            entities: Vec::new(),
+            feature_views: Vec::new(),
+            stream_feature_views: Vec::new(),
+            feature_services: Vec::new(),
+            on_demand_feature_views: Vec::new(),
+            entities_by_name: HashMap::new(),
+            feature_views_by_name: HashMap::new(),
+            stream_feature_views_by_name: HashMap::new(),
+            feature_services_by_name: HashMap::new(),
+            on_demand_feature_views_by_name: HashMap::new(),
+            all_feature_views_by_name: HashMap::new(),
+        }
+    }
+
+    fn from_proto(registry: core::Registry) -> Self {
+        let entities = registry
+            .entities
+            .iter()
+            .map(model::Entity::from_proto)
+            .collect::<Vec<_>>();
+        let feature_views = registry
+            .feature_views
+            .iter()
+            .map(model::FeatureView::from_proto)
+            .collect::<Vec<_>>();
+        let stream_feature_views = registry
+            .stream_feature_views
+            .iter()
+            .map(model::FeatureView::from_stream_proto)
+            .collect::<Vec<_>>();
+        let feature_services = registry
+            .feature_services
+            .iter()
+            .map(model::FeatureService::from_proto)
+            .collect::<Vec<_>>();
+        let on_demand_feature_views = registry
+            .on_demand_feature_views
+            .iter()
+            .map(model::OnDemandFeatureView::from_proto)
+            .collect::<Vec<_>>();
+
+        let mut entities_by_name = HashMap::new();
+        for entity in &entities {
+            entities_by_name.insert(entity.name.clone(), entity.clone());
+        }
+
+        let mut feature_views_by_name = HashMap::new();
+        for view in &feature_views {
+            feature_views_by_name.insert(view.base.name.clone(), view.clone());
+        }
+
+        let mut stream_feature_views_by_name = HashMap::new();
+        for view in &stream_feature_views {
+            stream_feature_views_by_name.insert(view.base.name.clone(), view.clone());
+        }
+
+        let mut feature_services_by_name = HashMap::new();
+        for service in &feature_services {
+            feature_services_by_name.insert(service.name.clone(), service.clone());
+        }
+
+        let mut on_demand_feature_views_by_name = HashMap::new();
+        for view in &on_demand_feature_views {
+            on_demand_feature_views_by_name.insert(view.base.name.clone(), view.clone());
+        }
+
+        let mut all_feature_views_by_name = feature_views_by_name.clone();
+        for (name, view) in &stream_feature_views_by_name {
+            all_feature_views_by_name.insert(name.clone(), view.clone());
+        }
+
+        Self {
+            entities,
+            feature_views,
+            stream_feature_views,
+            feature_services,
+            on_demand_feature_views,
+            entities_by_name,
+            feature_views_by_name,
+            stream_feature_views_by_name,
+            feature_services_by_name,
+            on_demand_feature_views_by_name,
+            all_feature_views_by_name,
+        }
+    }
+}
 
 pub struct Registry {
     project: String,
     store: FileRegistryStore,
-    cache_ttl: Duration,
-    cached: Option<core::Registry>,
-    cached_at: Option<Instant>,
+    snapshot: ArcSwap<RegistrySnapshot>,
+    last_refresh_epoch_secs: AtomicU64,
 }
 
 impl Registry {
@@ -24,24 +132,28 @@ impl Registry {
         Ok(Self {
             project,
             store,
-            cache_ttl: Duration::from_secs(config.cache_ttl_seconds.max(0) as u64),
-            cached: None,
-            cached_at: None,
+            snapshot: ArcSwap::from_pointee(RegistrySnapshot::empty()),
+            last_refresh_epoch_secs: AtomicU64::new(0),
         })
     }
 
-    pub fn initialize(&mut self) -> Result<()> {
-        self.get_registry_proto().map(|_| ())
+    pub fn initialize(&self) -> Result<()> {
+        self.refresh()
     }
 
-    /// Force a reload of the registry from the underlying store, ignoring cache TTL.
+    /// Force a reload of the registry from the underlying store.
     ///
     /// This mirrors the Python feature server behavior which refreshes registry out-of-band
     /// to avoid synchronous downloads/reads in the request path.
-    pub fn refresh(&mut self) -> Result<()> {
+    pub fn refresh(&self) -> Result<()> {
         let registry = self.store.get_registry_proto()?;
-        self.cached = Some(registry);
-        self.cached_at = Some(Instant::now());
+        let snapshot = Arc::new(RegistrySnapshot::from_proto(registry));
+        self.snapshot.store(snapshot);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.last_refresh_epoch_secs.store(now, Ordering::Release);
         Ok(())
     }
 
@@ -49,103 +161,65 @@ impl Registry {
         &self.project
     }
 
-    pub fn get_registry_proto(&mut self) -> Result<&core::Registry> {
-        let expired = self.cached.is_none()
-            || self
-                .cached_at
-                .map(|ts| {
-                    if self.cache_ttl.is_zero() {
-                        true
-                    } else {
-                        ts.elapsed() > self.cache_ttl
-                    }
-                })
-                .unwrap_or(true);
-
-        if expired {
-            let registry = self.store.get_registry_proto()?;
-            self.cached = Some(registry);
-            self.cached_at = Some(Instant::now());
-        }
-
-        self.cached
-            .as_ref()
-            .context("registry cache unexpectedly empty")
+    pub fn snapshot(&self) -> Arc<RegistrySnapshot> {
+        self.snapshot.load_full()
     }
 
-    pub fn list_entities(&mut self) -> Result<Vec<model::Entity>> {
-        let registry = self.get_registry_proto()?;
-        Ok(registry
-            .entities
-            .iter()
-            .map(model::Entity::from_proto)
-            .collect())
+    pub fn last_refresh_epoch_secs(&self) -> u64 {
+        self.last_refresh_epoch_secs.load(Ordering::Acquire)
     }
 
-    pub fn list_feature_views(&mut self) -> Result<Vec<model::FeatureView>> {
-        let registry = self.get_registry_proto()?;
-        Ok(registry
-            .feature_views
-            .iter()
-            .map(model::FeatureView::from_proto)
-            .collect())
+    pub fn list_entities(&self) -> Result<Vec<model::Entity>> {
+        Ok(self.snapshot().entities.clone())
     }
 
-    pub fn list_stream_feature_views(&mut self) -> Result<Vec<model::FeatureView>> {
-        let registry = self.get_registry_proto()?;
-        Ok(registry
-            .stream_feature_views
-            .iter()
-            .map(model::FeatureView::from_stream_proto)
-            .collect())
+    pub fn list_feature_views(&self) -> Result<Vec<model::FeatureView>> {
+        Ok(self.snapshot().feature_views.clone())
     }
 
-    pub fn list_feature_services(&mut self) -> Result<Vec<model::FeatureService>> {
-        let registry = self.get_registry_proto()?;
-        Ok(registry
-            .feature_services
-            .iter()
-            .map(model::FeatureService::from_proto)
-            .collect())
+    pub fn list_stream_feature_views(&self) -> Result<Vec<model::FeatureView>> {
+        Ok(self.snapshot().stream_feature_views.clone())
     }
 
-    pub fn list_on_demand_feature_views(&mut self) -> Result<Vec<model::OnDemandFeatureView>> {
-        let registry = self.get_registry_proto()?;
-        Ok(registry
-            .on_demand_feature_views
-            .iter()
-            .map(model::OnDemandFeatureView::from_proto)
-            .collect())
+    pub fn list_feature_services(&self) -> Result<Vec<model::FeatureService>> {
+        Ok(self.snapshot().feature_services.clone())
     }
 
-    pub fn get_feature_service(&mut self, name: &str) -> Result<model::FeatureService> {
-        let registry = self.get_registry_proto()?;
-        registry
-            .feature_services
-            .iter()
-            .find(|service| {
-                service
-                    .spec
-                    .as_ref()
-                    .map(|spec| spec.name == name)
-                    .unwrap_or(false)
-            })
-            .map(model::FeatureService::from_proto)
+    pub fn list_on_demand_feature_views(&self) -> Result<Vec<model::OnDemandFeatureView>> {
+        Ok(self.snapshot().on_demand_feature_views.clone())
+    }
+
+    pub fn feature_views_by_name(&self) -> HashMap<String, model::FeatureView> {
+        self.snapshot().feature_views_by_name.clone()
+    }
+
+    pub fn stream_feature_views_by_name(&self) -> HashMap<String, model::FeatureView> {
+        self.snapshot().stream_feature_views_by_name.clone()
+    }
+
+    pub fn all_feature_views_by_name(&self) -> HashMap<String, model::FeatureView> {
+        self.snapshot().all_feature_views_by_name.clone()
+    }
+
+    pub fn on_demand_feature_views_by_name(
+        &self,
+    ) -> HashMap<String, model::OnDemandFeatureView> {
+        self.snapshot().on_demand_feature_views_by_name.clone()
+    }
+
+    pub fn get_feature_service(&self, name: &str) -> Result<model::FeatureService> {
+        self.snapshot()
+            .feature_services_by_name
+            .get(name)
+            .cloned()
             .with_context(|| format!("feature service not found: {name}"))
     }
 
-    pub fn get_feature_view(&mut self, name: &str) -> Result<model::FeatureView> {
-        let registry = self.get_registry_proto()?;
-        registry
-            .feature_views
-            .iter()
-            .find(|view| {
-                view.spec
-                    .as_ref()
-                    .map(|spec| spec.name == name)
-                    .unwrap_or(false)
-            })
-            .map(model::FeatureView::from_proto)
+    pub fn get_feature_view(&self, name: &str) -> Result<model::FeatureView> {
+        self.snapshot()
+            .feature_views_by_name
+            .get(name)
+            .cloned()
             .with_context(|| format!("feature view not found: {name}"))
     }
 }

@@ -24,7 +24,7 @@ pub struct Features {
 impl FeatureStore {
     pub fn new(config: RepoConfig) -> Result<Self> {
         let registry_config = config.registry_config()?;
-        let mut registry = Registry::new(&registry_config, &config.repo_path, config.project.clone())?;
+        let registry = Registry::new(&registry_config, &config.repo_path, config.project.clone())?;
         registry.initialize()?;
         let online_store = RedisOnlineStore::new(config.project.clone(), &config)?;
         let transformation_service = transformation::GrpcTransformationService::from_config(&config)?;
@@ -36,12 +36,12 @@ impl FeatureStore {
         })
     }
 
-    pub fn refresh_registry(&mut self) -> Result<()> {
+    pub fn refresh_registry(&self) -> Result<()> {
         self.registry.refresh()
     }
 
     pub fn parse_features(
-        &mut self,
+        &self,
         kind: &serving::get_online_features_request::Kind,
     ) -> Result<Features> {
         match kind {
@@ -59,27 +59,27 @@ impl FeatureStore {
         }
     }
 
-    pub fn list_feature_views(&mut self) -> Result<Vec<model::FeatureView>> {
+    pub fn list_feature_views(&self) -> Result<Vec<model::FeatureView>> {
         self.registry.list_feature_views()
     }
 
-    pub fn list_stream_feature_views(&mut self) -> Result<Vec<model::FeatureView>> {
+    pub fn list_stream_feature_views(&self) -> Result<Vec<model::FeatureView>> {
         self.registry.list_stream_feature_views()
     }
 
-    pub fn list_entities(&mut self) -> Result<Vec<model::Entity>> {
+    pub fn list_entities(&self) -> Result<Vec<model::Entity>> {
         self.registry.list_entities()
     }
 
-    pub fn list_on_demand_feature_views(&mut self) -> Result<Vec<model::OnDemandFeatureView>> {
+    pub fn list_on_demand_feature_views(&self) -> Result<Vec<model::OnDemandFeatureView>> {
         self.registry.list_on_demand_feature_views()
     }
 
-    pub fn get_feature_service(&mut self, name: &str) -> Result<model::FeatureService> {
+    pub fn get_feature_service(&self, name: &str) -> Result<model::FeatureService> {
         self.registry.get_feature_service(name)
     }
 
-    pub fn get_feature_view(&mut self, name: &str) -> Result<model::FeatureView> {
+    pub fn get_feature_view(&self, name: &str) -> Result<model::FeatureView> {
         self.registry.get_feature_view(name)
     }
 
@@ -92,25 +92,16 @@ impl FeatureStore {
     }
 
     pub async fn get_online_features(
-        &mut self,
+        &self,
         feature_refs: Vec<String>,
         feature_service: Option<model::FeatureService>,
         mut join_key_to_entity_values: HashMap<String, Vec<types::Value>>,
         mut request_data: HashMap<String, Vec<types::Value>>,
         full_feature_names: bool,
     ) -> Result<Vec<onlineserving::FeatureVector>> {
-        let mut feature_views = HashMap::new();
-        for fv in self.list_feature_views()? {
-            feature_views.insert(fv.base.name.clone(), fv);
-        }
-        for fv in self.list_stream_feature_views()? {
-            feature_views.insert(fv.base.name.clone(), fv);
-        }
-
-        let mut on_demand_feature_views = HashMap::new();
-        for view in self.list_on_demand_feature_views()? {
-            on_demand_feature_views.insert(view.base.name.clone(), view);
-        }
+        let snapshot = self.registry.snapshot();
+        let feature_views = &snapshot.all_feature_views_by_name;
+        let on_demand_feature_views = &snapshot.on_demand_feature_views_by_name;
 
         let (requested_feature_views, requested_on_demand_feature_views) =
             if let Some(service) = feature_service.as_ref() {
@@ -127,7 +118,7 @@ impl FeatureStore {
                 )?
             };
 
-        let mut entities = self.list_entities()?;
+        let mut entities = snapshot.entities.clone();
         let entityless_case = requested_feature_views.iter().any(|view_and_refs| {
             view_and_refs
                 .view
@@ -198,7 +189,7 @@ impl FeatureStore {
         }
 
         if !requested_on_demand_feature_views.is_empty() {
-            if let Some(service) = self.transformation_service.as_mut() {
+            if let Some(service) = self.transformation_service.as_ref() {
                 let mut on_demand_vectors = transformation::augment_response_with_on_demand_transforms(
                     service,
                     &requested_on_demand_feature_views,

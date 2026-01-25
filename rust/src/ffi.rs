@@ -14,10 +14,9 @@ use arrow::record_batch::RecordBatch;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::Path;
-use std::sync::Mutex;
 
 pub struct ServiceHandle {
-    store: Mutex<FeatureStore>,
+    store: FeatureStore,
     runtime: tokio::runtime::Runtime,
 }
 
@@ -46,7 +45,7 @@ pub extern "C" fn feast_rust_new_service(
             .enable_all()
             .build()?;
         Ok(ServiceHandle {
-            store: Mutex::new(store),
+            store,
             runtime,
         })
     });
@@ -103,10 +102,7 @@ pub extern "C" fn feast_rust_get_online_features(
         let request_values = record_batch_to_values(&request_batch)?;
 
         let handle = unsafe { &*service };
-        let mut store = handle
-            .store
-            .lock()
-            .map_err(|_| anyhow::anyhow!("feature store lock poisoned"))?;
+        let store = &handle.store;
 
         let feature_service = if let Some(name) = feature_service_name {
             Some(store.get_feature_service(&name)?)

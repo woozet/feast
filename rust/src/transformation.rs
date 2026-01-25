@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 pub struct GrpcTransformationService {
     project: String,
-    client: serving::transformation_service_client::TransformationServiceClient<tonic::transport::Channel>,
+    channel: tonic::transport::Channel,
 }
 
 impl GrpcTransformationService {
@@ -26,10 +26,10 @@ impl GrpcTransformationService {
             .get("transformation_service_endpoint")
             .and_then(|value| value.as_str());
         if let Some(endpoint) = endpoint {
-            let client = new_transformation_client(endpoint)?;
+            let channel = new_transformation_channel(endpoint)?;
             Ok(Some(Self {
                 project: config.project.clone(),
-                client,
+                channel,
             }))
         } else {
             Ok(None)
@@ -37,7 +37,7 @@ impl GrpcTransformationService {
     }
 
     pub async fn get_transformation(
-        &mut self,
+        &self,
         feature_view: &model::OnDemandFeatureView,
         retrieved_features: &HashMap<String, Vec<types::Value>>,
         request_context: &HashMap<String, Vec<types::Value>>,
@@ -69,7 +69,11 @@ impl GrpcTransformationService {
             }),
         };
 
-        let response = self.client.transform_features(request).await?.into_inner();
+        let mut client =
+            serving::transformation_service_client::TransformationServiceClient::new(
+                self.channel.clone(),
+            );
+        let response = client.transform_features(request).await?.into_inner();
         let output_bytes = response
             .transformation_output
             .and_then(|value| value.value)
@@ -100,7 +104,7 @@ pub fn ensure_requested_data_exist(
 }
 
 pub async fn augment_response_with_on_demand_transforms(
-    service: &mut GrpcTransformationService,
+    service: &GrpcTransformationService,
     on_demand_feature_views: &[model::OnDemandFeatureView],
     request_data: &HashMap<String, Vec<types::Value>>,
     entity_rows: &HashMap<String, Vec<types::Value>>,
@@ -681,15 +685,12 @@ fn now_timestamp() -> prost_types::Timestamp {
     }
 }
 
-fn new_transformation_client(
-    endpoint: &str,
-) -> Result<serving::transformation_service_client::TransformationServiceClient<tonic::transport::Channel>> {
+fn new_transformation_channel(endpoint: &str) -> Result<tonic::transport::Channel> {
     let uri = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
         endpoint.to_string()
     } else {
         format!("http://{endpoint}")
     };
-    let channel = tonic::transport::Endpoint::from_shared(uri)?
-        .connect_lazy();
-    Ok(serving::transformation_service_client::TransformationServiceClient::new(channel))
+    let channel = tonic::transport::Endpoint::from_shared(uri)?.connect_lazy();
+    Ok(channel)
 }

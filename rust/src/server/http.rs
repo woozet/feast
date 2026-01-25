@@ -12,13 +12,12 @@ use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tracing::warn;
 
 #[derive(Clone)]
 struct AppState {
-    store: Arc<Mutex<FeatureStore>>,
+    store: Arc<FeatureStore>,
     ready: Arc<AtomicBool>,
 }
 
@@ -30,7 +29,7 @@ pub async fn start_http(
 ) -> anyhow::Result<()> {
     let addr = super::bind_addr(host, port)?;
     let state = AppState {
-        store: Arc::new(Mutex::new(store)),
+        store: Arc::new(store),
         ready: Arc::new(AtomicBool::new(false)),
     };
     spawn_registry_refresher(state.clone(), registry_ttl_sec);
@@ -54,13 +53,10 @@ async fn health(State(state): State<AppState>) -> StatusCode {
 
 fn spawn_registry_refresher(state: AppState, registry_ttl_sec: u64) {
     tokio::spawn(async move {
-        {
-            let mut store = state.store.lock().await;
-            if let Err(err) = store.refresh_registry() {
-                warn!(error = %err, "registry refresh failed");
-            } else {
-                state.ready.store(true, Ordering::Release);
-            }
+        if let Err(err) = state.store.refresh_registry() {
+            warn!(error = %err, "registry refresh failed");
+        } else {
+            state.ready.store(true, Ordering::Release);
         }
 
         if registry_ttl_sec == 0 {
@@ -70,8 +66,7 @@ fn spawn_registry_refresher(state: AppState, registry_ttl_sec: u64) {
         let mut ticker = tokio::time::interval(Duration::from_secs(registry_ttl_sec));
         loop {
             ticker.tick().await;
-            let mut store = state.store.lock().await;
-            if let Err(err) = store.refresh_registry() {
+            if let Err(err) = state.store.refresh_registry() {
                 // Keep serving with last-good registry; just log.
                 warn!(error = %err, "registry refresh failed");
             } else {
@@ -98,7 +93,7 @@ async fn get_online_features(
     State(state): State<AppState>,
     Json(request): Json<HttpGetOnlineFeaturesRequest>,
 ) -> impl IntoResponse {
-    let mut store = state.store.lock().await;
+    let store = state.store.as_ref();
     let feature_service = if let Some(name) = request.feature_service.as_ref() {
         match store.get_feature_service(name) {
             Ok(service) => Some(service),

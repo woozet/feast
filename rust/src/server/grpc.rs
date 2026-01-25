@@ -8,7 +8,6 @@ use crate::proto::feast::serving::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tonic::{Request, Response, Status};
 use tracing::warn;
@@ -20,7 +19,7 @@ pub async fn start_grpc(
     registry_ttl_sec: u64,
 ) -> anyhow::Result<()> {
     let addr = super::bind_addr(host, port)?;
-    let store = Arc::new(Mutex::new(store));
+    let store = Arc::new(store);
     spawn_registry_refresher(store.clone(), registry_ttl_sec);
     let service = GrpcServingService::new(store);
 
@@ -32,7 +31,7 @@ pub async fn start_grpc(
     Ok(())
 }
 
-fn spawn_registry_refresher(store: Arc<Mutex<FeatureStore>>, registry_ttl_sec: u64) {
+fn spawn_registry_refresher(store: Arc<FeatureStore>, registry_ttl_sec: u64) {
     if registry_ttl_sec == 0 {
         return;
     }
@@ -41,7 +40,6 @@ fn spawn_registry_refresher(store: Arc<Mutex<FeatureStore>>, registry_ttl_sec: u
         let mut ticker = tokio::time::interval(Duration::from_secs(registry_ttl_sec));
         loop {
             ticker.tick().await;
-            let mut store = store.lock().await;
             if let Err(err) = store.refresh_registry() {
                 warn!(error = %err, "registry refresh failed");
             }
@@ -50,11 +48,11 @@ fn spawn_registry_refresher(store: Arc<Mutex<FeatureStore>>, registry_ttl_sec: u
 }
 
 struct GrpcServingService {
-    store: Arc<Mutex<FeatureStore>>,
+    store: Arc<FeatureStore>,
 }
 
 impl GrpcServingService {
-    fn new(store: Arc<Mutex<FeatureStore>>) -> Self {
+    fn new(store: Arc<FeatureStore>) -> Self {
         Self { store }
     }
 }
@@ -79,8 +77,7 @@ impl ServingService for GrpcServingService {
             .kind
             .ok_or_else(|| Status::invalid_argument("missing feature service or feature list"))?;
 
-        let mut store = self.store.lock().await;
-        let features = store.parse_features(&kind).map_err(to_status)?;
+        let features = self.store.parse_features(&kind).map_err(to_status)?;
         let entities = request
             .entities
             .into_iter()
@@ -92,7 +89,7 @@ impl ServingService for GrpcServingService {
             .map(|(key, value)| (key, value.val))
             .collect::<HashMap<_, _>>();
 
-        let vectors = store
+        let vectors = self.store
             .get_online_features(
                 features.feature_refs,
                 features.feature_service,
