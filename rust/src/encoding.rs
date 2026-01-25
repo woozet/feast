@@ -113,10 +113,18 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
         String,
     }
 
+    if values.is_empty() {
+        return Ok(types::value::Val::Int64ListVal(types::Int64List { val: vec![] }));
+    }
+
     let mut list_type: Option<ListType> = None;
+    let mut saw_null = false;
     for value in values {
         match value {
-            JsonValue::Null => continue,
+            JsonValue::Null => {
+                saw_null = true;
+                continue;
+            }
             JsonValue::Bool(_) => {
                 list_type = Some(match list_type {
                     None => ListType::Bool,
@@ -161,6 +169,20 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
     }
 
     match list_type {
+        None => {
+            if saw_null {
+                let list = vec![f64::NAN; values.len()];
+                Ok(types::value::Val::DoubleListVal(types::DoubleList { val: list }))
+            } else {
+                anyhow::bail!("empty list values are not supported")
+            }
+        }
+        Some(ListType::Bool) if saw_null => {
+            anyhow::bail!("null values are not supported in bool lists")
+        }
+        Some(ListType::String) if saw_null => {
+            anyhow::bail!("null values are not supported in string lists")
+        }
         Some(ListType::Bool) => {
             let list = values
                 .iter()
@@ -171,7 +193,14 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
         Some(ListType::Double) => {
             let list = values
                 .iter()
-                .map(|value| value.as_f64().unwrap_or(0.0))
+                .map(|value| value.as_f64().unwrap_or(f64::NAN))
+                .collect::<Vec<_>>();
+            Ok(types::value::Val::DoubleListVal(types::DoubleList { val: list }))
+        }
+        Some(ListType::Int64) if saw_null => {
+            let list = values
+                .iter()
+                .map(|value| value.as_f64().unwrap_or(f64::NAN))
                 .collect::<Vec<_>>();
             Ok(types::value::Val::DoubleListVal(types::DoubleList { val: list }))
         }
@@ -189,7 +218,6 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
                 .collect::<Vec<_>>();
             Ok(types::value::Val::StringListVal(types::StringList { val: list }))
         }
-        None => anyhow::bail!("empty list values are not supported"),
     }
 }
 

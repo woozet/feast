@@ -10,6 +10,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
@@ -18,6 +19,7 @@ use tracing::warn;
 #[derive(Clone)]
 struct AppState {
     store: Arc<Mutex<FeatureStore>>,
+    ready: Arc<AtomicBool>,
 }
 
 pub async fn start_http(
@@ -29,6 +31,7 @@ pub async fn start_http(
     let addr = super::bind_addr(host, port)?;
     let state = AppState {
         store: Arc::new(Mutex::new(store)),
+        ready: Arc::new(AtomicBool::new(false)),
     };
     spawn_registry_refresher(state.clone(), registry_ttl_sec);
     let app = Router::new()
@@ -41,16 +44,29 @@ pub async fn start_http(
     Ok(())
 }
 
-async fn health() -> StatusCode {
-    StatusCode::OK
+async fn health(State(state): State<AppState>) -> StatusCode {
+    if state.ready.load(Ordering::Acquire) {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
 }
 
 fn spawn_registry_refresher(state: AppState, registry_ttl_sec: u64) {
-    if registry_ttl_sec == 0 {
-        return;
-    }
-
     tokio::spawn(async move {
+        {
+            let mut store = state.store.lock().await;
+            if let Err(err) = store.refresh_registry() {
+                warn!(error = %err, "registry refresh failed");
+            } else {
+                state.ready.store(true, Ordering::Release);
+            }
+        }
+
+        if registry_ttl_sec == 0 {
+            return;
+        }
+
         let mut ticker = tokio::time::interval(Duration::from_secs(registry_ttl_sec));
         loop {
             ticker.tick().await;
@@ -58,6 +74,8 @@ fn spawn_registry_refresher(state: AppState, registry_ttl_sec: u64) {
             if let Err(err) = store.refresh_registry() {
                 // Keep serving with last-good registry; just log.
                 warn!(error = %err, "registry refresh failed");
+            } else {
+                state.ready.store(true, Ordering::Release);
             }
         }
     });
