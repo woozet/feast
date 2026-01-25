@@ -86,7 +86,7 @@ fn registry_loads_fixture() -> Result<()> {
         client_id: "test".to_string(),
         cache_ttl_seconds: 0,
     };
-    let mut registry = Registry::new(&config, &root, "test_project".to_string())?;
+    let registry = Registry::new(&config, &root, "test_project".to_string())?;
     registry.initialize()?;
 
     let entities = registry.list_entities()?;

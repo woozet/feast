@@ -39,7 +39,7 @@ async fn odfv_python_e2e() -> Result<()> {
     );
 
     let registry_config = repo_config.registry_config()?;
-    let mut registry = Registry::new(
+    let registry = Registry::new(
         &registry_config,
         &repo_config.repo_path,
         repo_config.project.clone(),

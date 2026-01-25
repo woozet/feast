@@ -17,7 +17,6 @@ pub struct RegistrySnapshot {
     pub(crate) stream_feature_views: Vec<model::FeatureView>,
     pub(crate) feature_services: Vec<model::FeatureService>,
     pub(crate) on_demand_feature_views: Vec<model::OnDemandFeatureView>,
-    pub(crate) entities_by_name: HashMap<String, model::Entity>,
     pub(crate) feature_views_by_name: HashMap<String, model::FeatureView>,
     pub(crate) stream_feature_views_by_name: HashMap<String, model::FeatureView>,
     pub(crate) feature_services_by_name: HashMap<String, model::FeatureService>,
@@ -33,7 +32,6 @@ impl RegistrySnapshot {
             stream_feature_views: Vec::new(),
             feature_services: Vec::new(),
             on_demand_feature_views: Vec::new(),
-            entities_by_name: HashMap::new(),
             feature_views_by_name: HashMap::new(),
             stream_feature_views_by_name: HashMap::new(),
             feature_services_by_name: HashMap::new(),
@@ -69,11 +67,6 @@ impl RegistrySnapshot {
             .map(model::OnDemandFeatureView::from_proto)
             .collect::<Vec<_>>();
 
-        let mut entities_by_name = HashMap::new();
-        for entity in &entities {
-            entities_by_name.insert(entity.name.clone(), entity.clone());
-        }
-
         let mut feature_views_by_name = HashMap::new();
         for view in &feature_views {
             feature_views_by_name.insert(view.base.name.clone(), view.clone());
@@ -105,7 +98,6 @@ impl RegistrySnapshot {
             stream_feature_views,
             feature_services,
             on_demand_feature_views,
-            entities_by_name,
             feature_views_by_name,
             stream_feature_views_by_name,
             feature_services_by_name,
