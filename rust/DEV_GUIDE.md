@@ -4,15 +4,16 @@ This file captures the current Rust feature server work so it can be resumed qui
 
 ## Current status
 - Rust crate lives under `feast/rust`.
-- Feature store config loading, registry file loading, Redis online store keying, and HTTP/gRPC serving are implemented.
+- Feature store config loading, registry file/S3 loading, Redis online store keying, and HTTP/gRPC serving are implemented.
 - HTTP endpoint `/get-online-features` and gRPC `GetOnlineFeatures` are wired to the Rust pipeline.
 - OnDemand Feature Views are supported via the transformation service (Arrow IPC).
 - Entity-less (dummy entity) handling is supported in `FeatureStore`.
+- Registry refresh runs out-of-band with lock-free snapshots; `/health` returns `503` until the first refresh succeeds.
 - Tests: `cargo test` passes (requires network access the first time to fetch crates). Integration tests include a registry fixture and an optional Redis roundtrip.
 
 ## Implemented pieces
 - Config parsing: `feature_store.yaml` with env expansion in `feast/rust/src/config.rs`.
-- Registry: file-based registry proto loading in `feast/rust/src/registry.rs`.
+- Registry: file/S3 registry proto loading + ArcSwap snapshots in `feast/rust/src/registry/`.
 - Model mapping: `Entity`, `FeatureView`, `FeatureService`, projections in `feast/rust/src/model.rs`.
 - Online serving logic: grouping, join key validation, TTL check, feature vector assembly in `feast/rust/src/onlineserving.rs`.
 - Redis online read: HMGET with Go-compatible keys and field hashing in `feast/rust/src/onlinestore.rs`.
@@ -27,12 +28,14 @@ This file captures the current Rust feature server work so it can be resumed qui
 - HTTP response format matches Go Arrow JSON for supported Feast value types.
 - Redis cluster behavior is untested (cluster feature enabled, no `ReadOnly` tuning yet).
 - Redis integration test requires `FEAST_REDIS_TESTS=1` and a local Redis instance.
+- S3 registry integration test coverage is missing.
 
 ## Next steps (recommended order)
 1) Add tests for OnDemand Feature View + transformation service integration.
-2) Align HTTP JSON response format with Go (Arrow-like JSON) if strict parity is required.
-3) Add feature logging support when feature service has logging_config.
-4) Add Redis cluster integration tests and tuning as needed.
+2) Add S3 registry integration tests (and document credentials expectations).
+3) Align HTTP JSON response format with Go (Arrow-like JSON) if strict parity is required.
+4) Add feature logging support when feature service has logging_config.
+5) Add Redis cluster integration tests and tuning as needed.
 
 ## PR readiness checklist (suggested)
 - `cargo test` passes.
@@ -133,6 +136,14 @@ registry:
   path: data/registry.db
 ```
 
+S3 registry (either `registry_store_type: s3` or `s3://` path works):
+```yaml
+registry:
+  registry_store_type: s3
+  path: s3://my-bucket/path/to/registry.db
+```
+S3 uses the default AWS SDK credential/provider chain.
+
 ## Git workflow (fork already exists)
 ```bash
 git remote add fork git@github.com:woozet/feast.git
@@ -147,3 +158,5 @@ git push -u fork feat/rust-feature-server
 - `feast/rust/src/server/grpc.rs` (gRPC endpoint)
 - `feast/rust/src/encoding.rs` (JSON/proto conversions)
 - `feast/rust/src/featurestore.rs` (orchestration)
+- `feast/rust/src/registry/snapshot.rs` (registry snapshots)
+- `feast/rust/src/registry/store.rs` (file/S3 registry loading)

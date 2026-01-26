@@ -1,19 +1,20 @@
 # Rust feature server (WIP)
 
-Early Rust implementation targeting parity with the Go feature server.
+Early Rust implementation aligned with the Python feature server API.
 
 ## Features
 - HTTP and gRPC `GetOnlineFeatures`
-- File-based registry loading (`registry_store_type: file`)
+- File-based or S3 registry loading (`registry_store_type: file|s3` or `s3://` path)
 - Redis online store (node/cluster)
 - OnDemand Feature View transformations via gRPC transformation service
 - Entity-less (dummy entity) handling
+- Lock-free registry snapshots with background refresh (`--registry-ttl-sec`)
 
 ## Build and run
 ```bash
 cd feast/rust
 cargo build --release
-./target/release/feast-rust --type=http --port=8080 --chdir /path/to/feature_repo
+./target/release/feast-rust --type=http --port=8080 --registry-ttl-sec 5 --chdir /path/to/feature_repo
 # or gRPC
 # ./target/release/feast-rust --type=grpc --port=8080 --chdir /path/to/feature_repo
 ```
@@ -53,6 +54,14 @@ online_store:
   type: redis
   connection_string: localhost:6379
 ```
+
+S3 registry example:
+```yaml
+registry:
+  registry_store_type: s3
+  path: s3://my-bucket/path/to/registry.db
+```
+S3 uses the default AWS SDK credential/provider chain.
 
 Optional transformation service:
 ```yaml
@@ -95,4 +104,5 @@ cargo test --test odfv_e2e
 ## Notes
 - HTTP JSON output matches Go Arrow JSON for supported Feast value types.
 - Transformation service and Redis cluster behavior are supported but lightly tested.
+- `/health` returns `503` until the first registry refresh succeeds.
 - See `feast/rust/DEV_GUIDE.md` for current status and planned work.
