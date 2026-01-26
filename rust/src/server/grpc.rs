@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::Duration;
 use tonic::{Request, Response, Status};
-use tracing::warn;
+use tracing::{info, warn};
 
 pub async fn start_grpc(
     store: FeatureStore,
@@ -19,6 +19,7 @@ pub async fn start_grpc(
     registry_ttl_sec: u64,
 ) -> anyhow::Result<()> {
     let addr = super::bind_addr(host, port)?;
+    info!(%addr, registry_ttl_sec, "starting gRPC server");
     let store = Arc::new(store);
     spawn_registry_refresher(store.clone(), registry_ttl_sec);
     let service = GrpcServingService::new(store);

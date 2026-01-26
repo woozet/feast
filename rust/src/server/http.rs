@@ -1,9 +1,11 @@
 use crate::encoding;
 use crate::featurestore::FeatureStore;
 use axum::{
+    body::Body,
     extract::State,
-    http::StatusCode,
-    response::IntoResponse,
+    http::{Request, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -12,8 +14,9 @@ use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::time::Duration;
-use tracing::warn;
+use tracing::{info, warn};
 
 #[derive(Clone)]
 struct AppState {
@@ -28,6 +31,7 @@ pub async fn start_http(
     registry_ttl_sec: u64,
 ) -> anyhow::Result<()> {
     let addr = super::bind_addr(host, port)?;
+    info!(%addr, registry_ttl_sec, "starting HTTP server");
     let state = AppState {
         store: Arc::new(store),
         ready: Arc::new(AtomicBool::new(false)),
@@ -36,7 +40,8 @@ pub async fn start_http(
     let app = Router::new()
         .route("/health", get(health))
         .route("/get-online-features", post(get_online_features))
-        .with_state(state);
+        .with_state(state)
+        .layer(middleware::from_fn(log_request));
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -217,4 +222,20 @@ fn feast_error(class: &str, message: &str, status: StatusCode) -> (StatusCode, J
     })
     .to_string();
     (status, Json(JsonValue::String(detail)))
+}
+
+async fn log_request(req: Request<Body>, next: Next) -> Response {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let start = Instant::now();
+    let response = next.run(req).await;
+    let status = response.status();
+    info!(
+        %method,
+        %uri,
+        %status,
+        latency_ms = start.elapsed().as_millis(),
+        "request completed"
+    );
+    response
 }
