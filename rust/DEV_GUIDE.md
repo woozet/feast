@@ -25,21 +25,20 @@ This file captures the current Rust feature server work so it can be resumed qui
 ## Known gaps / TODO
 - OnDemand Feature Views (ODFV) selection has unit tests, but end-to-end integration coverage with transformation service is still limited.
 - Feature logging (feature service logging_config) is not implemented.
-- HTTP response format matches Go Arrow JSON for supported Feast value types.
+- HTTP response format matches the Python feature server encoding: Unix timestamps are epoch seconds, event timestamps are RFC3339.
 - Redis cluster behavior is untested (cluster feature enabled, no `ReadOnly` tuning yet).
 - Redis integration test requires `FEAST_REDIS_TESTS=1` and a local Redis instance.
-- S3 registry integration test coverage is missing.
 
 ## Next steps (recommended order)
 1) Add tests for OnDemand Feature View + transformation service integration.
-2) Add S3 registry integration tests (and document credentials expectations).
-3) Align HTTP JSON response format with Go (Arrow-like JSON) if strict parity is required.
-4) Add feature logging support when feature service has logging_config.
-5) Add Redis cluster integration tests and tuning as needed.
+2) Align HTTP JSON response format with Go (Arrow-like JSON) if strict parity is required.
+3) Add feature logging support when feature service has logging_config.
+4) Add Redis cluster integration tests and tuning as needed.
 
 ## PR readiness checklist (suggested)
 - `cargo test` passes.
 - Redis integration tests pass (`FEAST_REDIS_TESTS=1` with local Redis).
+- S3 registry integration test passes (`FEAST_S3_TESTS=1` with a writable bucket).
 - ODFV transformation integration test passes (`FEAST_TRANSFORM_TESTS=1`).
 - Python CFFI smoke test validates `EmbeddedRustOnlineFeatureServer`.
 - Docs mention any known gaps (feature logging, type limits, cluster support).
@@ -75,6 +74,12 @@ Optional transformation service integration test:
 ```bash
 cd feast/rust
 FEAST_TRANSFORM_TESTS=1 cargo test --test odfv_transformation_integration
+```
+
+Optional S3 registry integration test:
+```bash
+cd feast/rust
+FEAST_S3_TESTS=1 FEAST_S3_BUCKET=my-bucket cargo test --test registry_s3_integration
 ```
 
 Optional Python transformation server E2E test (proposed):

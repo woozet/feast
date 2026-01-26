@@ -91,6 +91,7 @@ Optional integration tests:
 ```bash
 FEAST_REDIS_TESTS=1 FEAST_REDIS_ADDR=localhost:6379 cargo test
 FEAST_TRANSFORM_TESTS=1 cargo test --test odfv_transformation_integration
+FEAST_S3_TESTS=1 FEAST_S3_BUCKET=my-bucket cargo test --test registry_s3_integration
 ```
 
 Optional Python transformation server E2E test:
@@ -102,7 +103,7 @@ cargo test --test odfv_e2e
 ```
 
 ## Notes
-- HTTP JSON output matches Go Arrow JSON for supported Feast value types.
+- HTTP JSON output matches the Python feature server encoding: Unix timestamps are epoch seconds, event timestamps are RFC3339.
 - Transformation service and Redis cluster behavior are supported but lightly tested.
 - `/health` returns `503` until the first registry refresh succeeds.
 - See `feast/rust/DEV_GUIDE.md` for current status and planned work.
