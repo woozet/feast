@@ -31,7 +31,9 @@ pub fn value_to_json(value: &types::Value) -> JsonValue {
         Some(types::value::Val::BytesListVal(list)) => JsonValue::Array(
             list.val
                 .iter()
-                .map(|bytes| JsonValue::String(base64::engine::general_purpose::STANDARD.encode(bytes)))
+                .map(|bytes| {
+                    JsonValue::String(base64::engine::general_purpose::STANDARD.encode(bytes))
+                })
                 .collect(),
         ),
         Some(types::value::Val::StringListVal(list)) => json!(list.val),
@@ -50,6 +52,21 @@ pub fn value_to_json(value: &types::Value) -> JsonValue {
             let values = list.val.iter().map(map_to_json).collect::<Vec<_>>();
             JsonValue::Array(values)
         }
+        Some(types::value::Val::BytesSetVal(set)) => JsonValue::Array(
+            set.val
+                .iter()
+                .map(|bytes| {
+                    JsonValue::String(base64::engine::general_purpose::STANDARD.encode(bytes))
+                })
+                .collect(),
+        ),
+        Some(types::value::Val::StringSetVal(set)) => json!(set.val),
+        Some(types::value::Val::Int32SetVal(set)) => json!(set.val),
+        Some(types::value::Val::Int64SetVal(set)) => json!(set.val),
+        Some(types::value::Val::DoubleSetVal(set)) => json!(set.val),
+        Some(types::value::Val::FloatSetVal(set)) => json!(set.val),
+        Some(types::value::Val::BoolSetVal(set)) => json!(set.val),
+        Some(types::value::Val::UnixTimestampSetVal(set)) => json!(set.val),
     }
 }
 
@@ -103,7 +120,9 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
     }
 
     if values.is_empty() {
-        return Ok(types::value::Val::Int64ListVal(types::Int64List { val: vec![] }));
+        return Ok(types::value::Val::Int64ListVal(types::Int64List {
+            val: vec![],
+        }));
     }
 
     let mut list_type: Option<ListType> = None;
@@ -122,10 +141,7 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
                 });
             }
             JsonValue::Number(number) => {
-                let is_double = number
-                    .as_f64()
-                    .map(|v| v.fract() != 0.0)
-                    .unwrap_or(false);
+                let is_double = number.as_f64().map(|v| v.fract() != 0.0).unwrap_or(false);
                 list_type = Some(match list_type {
                     None => {
                         if is_double {
@@ -161,7 +177,9 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
         None => {
             if saw_null {
                 let list = vec![f64::NAN; values.len()];
-                Ok(types::value::Val::DoubleListVal(types::DoubleList { val: list }))
+                Ok(types::value::Val::DoubleListVal(types::DoubleList {
+                    val: list,
+                }))
             } else {
                 anyhow::bail!("empty list values are not supported")
             }
@@ -177,35 +195,45 @@ fn json_array_to_list_value(values: &[JsonValue]) -> Result<types::value::Val> {
                 .iter()
                 .map(|value| value.as_bool().unwrap_or(false))
                 .collect::<Vec<_>>();
-            Ok(types::value::Val::BoolListVal(types::BoolList { val: list }))
+            Ok(types::value::Val::BoolListVal(types::BoolList {
+                val: list,
+            }))
         }
         Some(ListType::Double) => {
             let list = values
                 .iter()
                 .map(|value| value.as_f64().unwrap_or(f64::NAN))
                 .collect::<Vec<_>>();
-            Ok(types::value::Val::DoubleListVal(types::DoubleList { val: list }))
+            Ok(types::value::Val::DoubleListVal(types::DoubleList {
+                val: list,
+            }))
         }
         Some(ListType::Int64) if saw_null => {
             let list = values
                 .iter()
                 .map(|value| value.as_f64().unwrap_or(f64::NAN))
                 .collect::<Vec<_>>();
-            Ok(types::value::Val::DoubleListVal(types::DoubleList { val: list }))
+            Ok(types::value::Val::DoubleListVal(types::DoubleList {
+                val: list,
+            }))
         }
         Some(ListType::Int64) => {
             let list = values
                 .iter()
                 .map(|value| value.as_i64().unwrap_or(0))
                 .collect::<Vec<_>>();
-            Ok(types::value::Val::Int64ListVal(types::Int64List { val: list }))
+            Ok(types::value::Val::Int64ListVal(types::Int64List {
+                val: list,
+            }))
         }
         Some(ListType::String) => {
             let list = values
                 .iter()
                 .map(|value| value.as_str().unwrap_or("").to_string())
                 .collect::<Vec<_>>();
-            Ok(types::value::Val::StringListVal(types::StringList { val: list }))
+            Ok(types::value::Val::StringListVal(types::StringList {
+                val: list,
+            }))
         }
     }
 }

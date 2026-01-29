@@ -169,10 +169,7 @@ fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
     }
 }
 
-unsafe fn c_str_array_to_vec(
-    ptr: *const *const c_char,
-    len: usize,
-) -> Result<Vec<String>> {
+unsafe fn c_str_array_to_vec(ptr: *const *const c_char, len: usize) -> Result<Vec<String>> {
     if ptr.is_null() || len == 0 {
         return Ok(Vec::new());
     }
@@ -390,7 +387,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                 .iter()
                 .map(|value| value.ok_or_else(|| anyhow::anyhow!("null list value")))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::Int32ListVal(types::Int32List { val: vals }))
+            Ok(types::value::Val::Int32ListVal(types::Int32List {
+                val: vals,
+            }))
         }
         DataType::Int64 => {
             let arr = array
@@ -401,7 +400,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                 .iter()
                 .map(|value| value.ok_or_else(|| anyhow::anyhow!("null list value")))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::Int64ListVal(types::Int64List { val: vals }))
+            Ok(types::value::Val::Int64ListVal(types::Int64List {
+                val: vals,
+            }))
         }
         DataType::Float32 => {
             let arr = array
@@ -412,7 +413,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                 .iter()
                 .map(|value| value.ok_or_else(|| anyhow::anyhow!("null list value")))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::FloatListVal(types::FloatList { val: vals }))
+            Ok(types::value::Val::FloatListVal(types::FloatList {
+                val: vals,
+            }))
         }
         DataType::Float64 => {
             let arr = array
@@ -423,7 +426,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                 .iter()
                 .map(|value| value.ok_or_else(|| anyhow::anyhow!("null list value")))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::DoubleListVal(types::DoubleList { val: vals }))
+            Ok(types::value::Val::DoubleListVal(types::DoubleList {
+                val: vals,
+            }))
         }
         DataType::Boolean => {
             let arr = array
@@ -434,7 +439,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                 .iter()
                 .map(|value| value.ok_or_else(|| anyhow::anyhow!("null list value")))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::BoolListVal(types::BoolList { val: vals }))
+            Ok(types::value::Val::BoolListVal(types::BoolList {
+                val: vals,
+            }))
         }
         DataType::Utf8 => {
             let arr = array
@@ -449,7 +456,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                         .ok_or_else(|| anyhow::anyhow!("null list value"))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::StringListVal(types::StringList { val: vals }))
+            Ok(types::value::Val::StringListVal(types::StringList {
+                val: vals,
+            }))
         }
         DataType::Binary => {
             let arr = array
@@ -464,7 +473,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                         .ok_or_else(|| anyhow::anyhow!("null list value"))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::BytesListVal(types::BytesList { val: vals }))
+            Ok(types::value::Val::BytesListVal(types::BytesList {
+                val: vals,
+            }))
         }
         DataType::Timestamp(TimeUnit::Second, _) => {
             let arr = array
@@ -475,7 +486,9 @@ fn list_values_from_array(array: ArrayRef, element_type: &DataType) -> Result<ty
                 .iter()
                 .map(|value| value.ok_or_else(|| anyhow::anyhow!("null list value")))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(types::value::Val::UnixTimestampListVal(types::Int64List { val: vals }))
+            Ok(types::value::Val::UnixTimestampListVal(types::Int64List {
+                val: vals,
+            }))
         }
         other => anyhow::bail!("unsupported list type: {other:?}"),
     }
@@ -717,16 +730,14 @@ fn values_to_array(values: &[types::Value]) -> Result<(ArrayRef, DataType)> {
                 ))),
             ))
         }
-        ValueKind::TimestampList => {
-            Ok((
-                build_timestamp_list_array(values)?,
-                DataType::List(std::sync::Arc::new(Field::new(
-                    "item",
-                    DataType::Timestamp(TimeUnit::Second, None),
-                    true,
-                ))),
-            ))
-        }
+        ValueKind::TimestampList => Ok((
+            build_timestamp_list_array(values)?,
+            DataType::List(std::sync::Arc::new(Field::new(
+                "item",
+                DataType::Timestamp(TimeUnit::Second, None),
+                true,
+            ))),
+        )),
     }
 }
 
@@ -736,6 +747,12 @@ fn build_int32_list_array(values: &[types::Value]) -> Result<ArrayRef> {
         match &value.val {
             Some(types::value::Val::Int32ListVal(list)) => {
                 for item in &list.val {
+                    builder.values().append_value(*item);
+                }
+                builder.append(true);
+            }
+            Some(types::value::Val::Int32SetVal(set)) => {
+                for item in &set.val {
                     builder.values().append_value(*item);
                 }
                 builder.append(true);
@@ -757,6 +774,12 @@ fn build_int64_list_array(values: &[types::Value]) -> Result<ArrayRef> {
                 }
                 builder.append(true);
             }
+            Some(types::value::Val::Int64SetVal(set)) => {
+                for item in &set.val {
+                    builder.values().append_value(*item);
+                }
+                builder.append(true);
+            }
             None => builder.append(false),
             _ => builder.append(false),
         }
@@ -770,6 +793,12 @@ fn build_float32_list_array(values: &[types::Value]) -> Result<ArrayRef> {
         match &value.val {
             Some(types::value::Val::FloatListVal(list)) => {
                 for item in &list.val {
+                    builder.values().append_value(*item);
+                }
+                builder.append(true);
+            }
+            Some(types::value::Val::FloatSetVal(set)) => {
+                for item in &set.val {
                     builder.values().append_value(*item);
                 }
                 builder.append(true);
@@ -791,6 +820,12 @@ fn build_float64_list_array(values: &[types::Value]) -> Result<ArrayRef> {
                 }
                 builder.append(true);
             }
+            Some(types::value::Val::DoubleSetVal(set)) => {
+                for item in &set.val {
+                    builder.values().append_value(*item);
+                }
+                builder.append(true);
+            }
             None => builder.append(false),
             _ => builder.append(false),
         }
@@ -804,6 +839,12 @@ fn build_bool_list_array(values: &[types::Value]) -> Result<ArrayRef> {
         match &value.val {
             Some(types::value::Val::BoolListVal(list)) => {
                 for item in &list.val {
+                    builder.values().append_value(*item);
+                }
+                builder.append(true);
+            }
+            Some(types::value::Val::BoolSetVal(set)) => {
+                for item in &set.val {
                     builder.values().append_value(*item);
                 }
                 builder.append(true);
@@ -825,6 +866,12 @@ fn build_string_list_array(values: &[types::Value]) -> Result<ArrayRef> {
                 }
                 builder.append(true);
             }
+            Some(types::value::Val::StringSetVal(set)) => {
+                for item in &set.val {
+                    builder.values().append_value(item);
+                }
+                builder.append(true);
+            }
             None => builder.append(false),
             _ => builder.append(false),
         }
@@ -838,6 +885,12 @@ fn build_bytes_list_array(values: &[types::Value]) -> Result<ArrayRef> {
         match &value.val {
             Some(types::value::Val::BytesListVal(list)) => {
                 for item in &list.val {
+                    builder.values().append_value(item);
+                }
+                builder.append(true);
+            }
+            Some(types::value::Val::BytesSetVal(set)) => {
+                for item in &set.val {
                     builder.values().append_value(item);
                 }
                 builder.append(true);
@@ -859,6 +912,12 @@ fn build_timestamp_list_array(values: &[types::Value]) -> Result<ArrayRef> {
                 }
                 builder.append(true);
             }
+            Some(types::value::Val::UnixTimestampSetVal(set)) => {
+                for item in &set.val {
+                    builder.values().append_value(*item);
+                }
+                builder.append(true);
+            }
             None => builder.append(false),
             _ => builder.append(false),
         }
@@ -869,7 +928,9 @@ fn build_timestamp_list_array(values: &[types::Value]) -> Result<ArrayRef> {
 fn infer_value_kind(values: &[types::Value]) -> Result<ValueKind> {
     let mut kind: Option<ValueKind> = None;
     for value in values {
-        let Some(val) = &value.val else { continue; };
+        let Some(val) = &value.val else {
+            continue;
+        };
         let current = value_kind_for(val)?;
         if let Some(existing) = kind {
             if existing != current {
@@ -900,6 +961,14 @@ fn value_kind_for(val: &types::value::Val) -> Result<ValueKind> {
         types::value::Val::StringListVal(_) => ValueKind::StringList,
         types::value::Val::BytesListVal(_) => ValueKind::BytesList,
         types::value::Val::UnixTimestampListVal(_) => ValueKind::TimestampList,
+        types::value::Val::BytesSetVal(_) => ValueKind::BytesList,
+        types::value::Val::StringSetVal(_) => ValueKind::StringList,
+        types::value::Val::Int32SetVal(_) => ValueKind::Int32List,
+        types::value::Val::Int64SetVal(_) => ValueKind::Int64List,
+        types::value::Val::DoubleSetVal(_) => ValueKind::Float64List,
+        types::value::Val::FloatSetVal(_) => ValueKind::Float32List,
+        types::value::Val::BoolSetVal(_) => ValueKind::BoolList,
+        types::value::Val::UnixTimestampSetVal(_) => ValueKind::TimestampList,
         types::value::Val::NullVal(_) => ValueKind::Null,
         types::value::Val::MapVal(_) | types::value::Val::MapListVal(_) => {
             anyhow::bail!("map values are not supported")
