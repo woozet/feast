@@ -14,7 +14,7 @@ Early Rust implementation aligned with the Python feature server API.
 ```bash
 cd feast/rust
 cargo build --release
-./target/release/feast-rust --type=http --port=8080 --registry-ttl-sec 5 --chdir /path/to/feature_repo
+./target/release/feast-rust --type=http --port=8080 --registry-ttl-sec 60 --chdir /path/to/feature_repo
 # or gRPC
 # ./target/release/feast-rust --type=grpc --port=8080 --chdir /path/to/feature_repo
 ```

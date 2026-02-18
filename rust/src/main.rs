@@ -16,7 +16,7 @@ struct Args {
     #[arg(long, default_value_t = 8080)]
     port: u16,
     /// How often to refresh the registry out-of-band (seconds). Set to 0 to disable.
-    #[arg(long = "registry-ttl-sec", default_value_t = 5)]
+    #[arg(long = "registry-ttl-sec", default_value_t = 60)]
     registry_ttl_sec: u64,
     #[arg(long = "chdir", default_value = ".")]
     repo_path: PathBuf,
